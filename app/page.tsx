@@ -31,6 +31,8 @@ export default function SnippetsPage() {
     const [isEditingTags, setIsEditingTags] = useState(false);
     const [allTags, setAllTags] = useState<string[]>([]);
 
+    const [viewingSnippet, setViewingSnippet] = useState<Snippet | null>(null);
+
     // Fetch snippets from the API
     const fetchSnippets = async () => {
         try {
@@ -240,6 +242,10 @@ export default function SnippetsPage() {
                 editingSnippet={editingSnippet}
                 setEditingSnippet={setEditingSnippet}
                 saveUpdatedSnippet={saveUpdatedSnippet}
+                viewingSnippet={viewingSnippet}
+                setViewingSnippet={setViewingSnippet}
+                copied={copied}
+                copyToClipboard={copyToClipboard}
             />
 
             <EditNameDialog

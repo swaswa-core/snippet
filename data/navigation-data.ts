@@ -3,13 +3,13 @@ import {SerializableNavItem} from "@/components/layout/sidebar-nav";
 
 export const navItems: SerializableNavItem[] = [
     {
-        title: "Home",
+        title: "Dashboard",
         url: "/",
-        iconName: "IconHome"
+        iconName: "IconDashboard"
     },
     {
-        title: "Inbox",
-        url: "/inbox",
-        iconName: "IconInbox"
+        title: "Snippets",
+        url: "/snippets",
+        iconName: "IconCode"
     }
 ]

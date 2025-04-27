@@ -1,37 +1,155 @@
-'use client';
+
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X } from "lucide-react";
+import {CheckIcon, CopyIcon, Plus, Tags, X} from "lucide-react";
 import { Snippet } from "@/types/snippet";
+import {Checkbox} from "@/components/ui/checkbox";
+import {Label} from "recharts";
+import {useState} from "react";
 
 interface EditSnippetDialogProps {
+    // Edit mode props
     editingSnippet: Snippet | null;
-    setEditingSnippet: (snippet: Snippet | null) => void;
+    setEditingSnippet: (snippet: any) => void;
     saveUpdatedSnippet: () => void;
+
+    // View mode props
+    viewingSnippet: Snippet | null;
+    setViewingSnippet: (snippet: Snippet | null) => void;
+
+    // Copy functionality
+    copied: string | null;
+    copyToClipboard: (id: string, content: string) => void;
 }
 
-export function EditSnippetDialog({ editingSnippet, setEditingSnippet, saveUpdatedSnippet }: EditSnippetDialogProps) {
+
+interface EditSnippetDialogProps {
+    // Edit mode props
+    editingSnippet: Snippet | null;
+    setEditingSnippet: (snippet: any) => void;
+    saveUpdatedSnippet: () => void;
+
+    // View mode props
+    viewingSnippet: Snippet | null;
+    setViewingSnippet: (snippet: Snippet | null) => void;
+
+    // Copy functionality
+    copied: string | null;
+    copyToClipboard: (id: string, content: string) => void;
+}
+
+export function EditSnippetDialog({
+                                      editingSnippet,
+                                      setEditingSnippet,
+                                      saveUpdatedSnippet,
+                                      viewingSnippet,
+                                      setViewingSnippet,
+                                      copied,
+                                      copyToClipboard
+                                  }: EditSnippetDialogProps) {
+    const [isEditing, setIsEditing] = useState(false);
+
+    // Handle toggling edit mode
+    const toggleEditMode = () => {
+        setIsEditing(!isEditing);
+
+        // If turning off edit mode without saving, reset content to original
+        if (isEditing && viewingSnippet) {
+            setEditingSnippet({...viewingSnippet});
+        }
+    };
+
+    // Handle save - also turns off edit mode
+    const handleSave = () => {
+        saveUpdatedSnippet();
+        setIsEditing(false);
+    };
+
+    // Combined snippet - either viewing or editing
+    const snippet = editingSnippet || viewingSnippet;
+
     return (
-        <Dialog open={!!editingSnippet} onOpenChange={() => setEditingSnippet(null)}>
-            <DialogContent className="sm:max-w-md">
+        <Dialog open={!!snippet} onOpenChange={(open) => !open && (setViewingSnippet(null), setEditingSnippet(null))}>
+            <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
-                    <DialogTitle className="text-lg">Edit Snippet</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2">
+                        <span>{snippet?.name}</span>
+                        <Badge variant="outline" className="ml-2">
+                            {snippet?.language || "text"}
+                        </Badge>
+                        <div className="ml-auto flex items-center gap-2">
+                            <Checkbox
+                                id="edit-mode"
+                                checked={isEditing}
+                                onCheckedChange={toggleEditMode}
+                            />
+                            <span className="text-sm cursor-pointer" onClick={toggleEditMode}>
+                                Edit mode
+                            </span>
+                        </div>
+                    </DialogTitle>
+                    <DialogDescription>
+                        {snippet?.tags && snippet.tags.length > 0 ? (
+                            <div className="flex items-center gap-1 mt-1">
+                                <Tags className="h-3 w-3 text-muted-foreground" />
+                                <div className="flex flex-wrap gap-1">
+                                    {snippet.tags.map(tag => (
+                                        <Badge key={tag} variant="secondary" className="text-xs">
+                                            {tag}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : "No tags"}
+                    </DialogDescription>
                 </DialogHeader>
-                {editingSnippet && (
+
+                {isEditing ? (
+                    // Edit mode
                     <div className="grid gap-4">
                         <Textarea
-                            value={editingSnippet.content}
+                            value={editingSnippet?.content || ""}
                             onChange={(e) => setEditingSnippet({...editingSnippet, content: e.target.value})}
                             className="min-h-[200px] text-sm font-mono"
                         />
-                        <Button onClick={saveUpdatedSnippet} className="mt-2">
+                        <Button onClick={handleSave} className="mt-2">
                             Save
                         </Button>
                     </div>
+                ) : (
+                    // View mode
+                    <>
+                        <div className="rounded-md bg-slate-950 p-4 overflow-auto max-h-[400px]">
+                            <pre className="text-sm font-mono text-white whitespace-pre-wrap">
+                                {snippet?.content}
+                            </pre>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-muted-foreground">
+                            <span>Created on {snippet && new Date(snippet.createdAt).toLocaleDateString()}</span>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => snippet && copyToClipboard(snippet.id, snippet.content)}
+                                className="gap-1"
+                            >
+                                {copied === snippet?.id ? (
+                                    <>
+                                        <CheckIcon className="h-3 w-3 text-green-500" />
+                                        <span className="text-green-500">Copied!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CopyIcon className="h-3 w-3" />
+                                        <span>Copy code</span>
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </>
                 )}
             </DialogContent>
         </Dialog>
