@@ -1,10 +1,12 @@
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { SnippetContextMenu } from "@/components/snippet/snippet-context-menu";
 import { Snippet } from "@/types/snippet";
-import { ChevronDown, ChevronUp, Check, Pin, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Check, Pin, X, Clipboard, Edit, Tag, Trash2 } from "lucide-react";
 import Highlight from 'react-syntax-highlighter';
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
 
@@ -31,6 +33,56 @@ export function SnippetCard({
                                 onEdit,
                                 onTagFilter
                             }: SnippetCardProps) {
+    const cardRef = useRef<HTMLDivElement>(null);
+    const [showActions, setShowActions] = useState(false);
+    
+    // Handle keyboard shortcuts
+    const handleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (!cardRef.current || !cardRef.current.contains(document.activeElement)) return;
+        
+        // Only process if this card has focus
+        switch (e.key) {
+            case 'c':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    onCopy(snippet.id, snippet.content);
+                }
+                break;
+            case 'e':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    onEdit(snippet);
+                }
+                break;
+            case 'p':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    onTogglePin(snippet.id, !snippet.isPinned);
+                }
+                break;
+            case 'Delete':
+                if (cardRef.current.contains(document.activeElement)) {
+                    e.preventDefault();
+                    onDelete(snippet.id);
+                }
+                break;
+            case 'Escape':
+                if (expandedSnippet === snippet.id) {
+                    e.preventDefault();
+                    onToggleExpand(snippet.id, new MouseEvent('click') as any);
+                }
+                break;
+        }
+    }, [snippet, onCopy, onEdit, onTogglePin, onDelete, onToggleExpand, expandedSnippet]);
+    
+    // Register and cleanup event listeners
+    useEffect(() => {
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [handleKeyDown]);
+    
     return (
         <SnippetContextMenu
             snippet={snippet}
@@ -40,11 +92,17 @@ export function SnippetCard({
             onEditName={onEdit}
             onEditTags={onEdit}
         >
-            <Card className={cn(
-                "transition-shadow relative group cursor-pointer h-48",
-                snippet.isPinned ? "border-yellow-400 shadow-md" : "hover:shadow-md"
-            )}
-                  onClick={() => onCopy(snippet.id, snippet.content)}
+            <Card 
+                ref={cardRef}
+                className={cn(
+                    "transition-shadow relative group cursor-pointer h-48",
+                    snippet.isPinned ? "border-yellow-400 shadow-md" : "hover:shadow-md",
+                    "focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50"
+                )}
+                onClick={() => onCopy(snippet.id, snippet.content)}
+                onMouseEnter={() => setShowActions(true)}
+                onMouseLeave={() => setShowActions(false)}
+                tabIndex={0}
             >
                 {snippet.isPinned && (
                     <div className="absolute left-1 top-1">
@@ -113,13 +171,88 @@ export function SnippetCard({
                         <span className="text-xs text-gray-400 text-right">{new Date(snippet.createdAt).toLocaleDateString()}</span>
                     </div>
 
-                    <button
-                        className="absolute right-1 top-1 p-1 rounded-full bg-gray-800 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => onToggleExpand(snippet.id, e)}
-                        title={expandedSnippet === snippet.id ? "Collapse" : "Expand"}
+                    {/* Quick action buttons */}
+                    <div 
+                        className={cn(
+                            "absolute right-1 top-1 flex space-x-1 bg-gray-800/80 rounded-full px-1",
+                            showActions || cardRef.current?.contains(document.activeElement) 
+                                ? "opacity-100" 
+                                : "opacity-0"
+                        )}
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        {expandedSnippet === snippet.id ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
-                    </button>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className="p-1 text-white hover:text-green-400 transition-colors"
+                                        onClick={() => onCopy(snippet.id, snippet.content)}
+                                    >
+                                        <Clipboard size={12} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    Copy (Ctrl+C)
+                                </TooltipContent>
+                            </Tooltip>
+                            
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className="p-1 text-white hover:text-blue-400 transition-colors"
+                                        onClick={() => onEdit(snippet)}
+                                    >
+                                        <Edit size={12} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    Edit (Ctrl+E)
+                                </TooltipContent>
+                            </Tooltip>
+                            
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className="p-1 text-white hover:text-yellow-400 transition-colors"
+                                        onClick={() => onTogglePin(snippet.id, !snippet.isPinned)}
+                                    >
+                                        <Pin size={12} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    {snippet.isPinned ? "Unpin (Ctrl+P)" : "Pin (Ctrl+P)"}
+                                </TooltipContent>
+                            </Tooltip>
+                            
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className="p-1 text-white hover:text-red-400 transition-colors"
+                                        onClick={() => onDelete(snippet.id)}
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    Delete (Delete)
+                                </TooltipContent>
+                            </Tooltip>
+                            
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        className="p-1 text-white hover:text-gray-300 transition-colors"
+                                        onClick={(e) => onToggleExpand(snippet.id, e)}
+                                    >
+                                        {expandedSnippet === snippet.id ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    {expandedSnippet === snippet.id ? "Collapse (Esc)" : "Expand"}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
                 </CardContent>
             </Card>
         </SnippetContextMenu>

@@ -8,14 +8,42 @@ datasource db {
 }
 
 model Snippet {
-  id        String   @id @default(cuid())
-  name      String
-  content   String
-  language  String
-  tags      String[] @default([])
-  isPinned  Boolean  @default(false)
-  views     Int      @default(0) // 👈 added views
-  copies    Int      @default(0) // 👈 added copies
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String          @id @default(cuid())
+  name        String
+  content     String
+  language    String
+  tags        String[]        @default([])
+  isPinned    Boolean         @default(false)
+  views       Int             @default(0)
+  copies      Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  versions    SnippetVersion[]
+  folderId    String?
+  folder      Folder?         @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  shareToken  String?         @unique
+  isPublic    Boolean         @default(false)
+}
+
+model SnippetVersion {
+  id          String   @id @default(cuid())
+  snippetId   String
+  content     String
+  versionNumber Int
+  createdAt   DateTime @default(now())
+  snippet     Snippet  @relation(fields: [snippetId], references: [id], onDelete: Cascade)
+  
+  @@index([snippetId])
+}
+
+model Folder {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  parentId    String?
+  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Folder[] @relation("FolderHierarchy")
+  snippets    Snippet[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

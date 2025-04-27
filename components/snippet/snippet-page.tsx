@@ -1,14 +1,12 @@
 'use client';
 
-import { useState, useEffect } from "react";
-import { toast } from "sonner";
+import { Suspense } from "react";
 import { Snippet } from "@/types/snippet";
-import { IconPin } from "@tabler/icons-react";
 import {
-    CheckIcon, CopyIcon, PencilIcon, Pin, PinOff, Tags, Trash2
+    CheckIcon, CopyIcon, PencilIcon, Pin, PinOff, Tags, Trash2, Loader2
 } from "lucide-react";
 
-import { detectLanguage, extractUniqueTags, handleSnippetError, organizeSnippets } from "@/lib/snippet-util";
+import { organizeSnippets } from "@/lib/snippet-util";
 import { SearchFilterSection } from "@/components/snippet/search-filter-section";
 import { SnippetCard } from "@/components/snippet/snippet-card";
 import { SnippetGroupCarousel } from "@/components/snippet/snippet-carousel";
@@ -32,6 +30,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useSnippetStore } from "@/hooks/use-snippet-store";
 
 // Define the view types
 export type SnippetViewType = 'carousel' | 'table';
@@ -42,68 +41,69 @@ interface SnippetPageProps {
     description?: string;
 }
 
+// Loading component for better UX
+function SnippetPageSkeleton() {
+    return (
+        <div className="container mx-auto py-6 animate-pulse">
+            <div className="h-8 w-1/3 bg-gray-200 rounded mb-4"></div>
+            <div className="h-4 w-2/3 bg-gray-200 rounded mb-6"></div>
+            
+            <div className="h-12 bg-gray-200 rounded mb-6"></div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {Array(8).fill(0).map((_, i) => (
+                    <div key={i} className="h-48 bg-gray-200 rounded"></div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 export default function SnippetPage({ viewType, title = "Snippets", description }: SnippetPageProps) {
-    // State management
-    const [snippets, setSnippets] = useState<Snippet[]>([]);
-    const [filteredSnippets, setFilteredSnippets] = useState<Snippet[]>([]);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [filterTag, setFilterTag] = useState<string | null>(null);
-    const [name, setName] = useState("");
-    const [content, setContent] = useState("");
+    // Use centralized state from Zustand store
+    const {
+        snippets,
+        filteredSnippets,
+        allTags,
+        isLoading,
+        error,
+        searchQuery,
+        filterTag,
+        copied,
+        expandedSnippet,
+        editingSnippet,
+        isEditingName,
+        isEditingTags,
+        viewingSnippet,
+        isDeleteConfirmOpen,
+        snippetToDelete,
+        
+        // Actions
+        fetchSnippets,
+        updateSnippet,
+        deleteSnippet,
+        togglePinStatus,
+        setSearchQuery,
+        setFilterTag,
+        copyToClipboard,
+        toggleExpand,
+        setEditingSnippet,
+        setIsEditingName,
+        setIsEditingTags,
+        setViewingSnippet,
+        confirmDelete,
+        cancelDelete
+    } = useSnippetStore();
+    
+    // Local state for tag editing
     const [tags, setTags] = useState<string[]>([]);
     const [currentTag, setCurrentTag] = useState("");
-    const [detectedLanguage, setDetectedLanguage] = useState("");
-    const [copied, setCopied] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [expandedSnippet, setExpandedSnippet] = useState<string | null>(null);
-    const [editingSnippet, setEditingSnippet] = useState<Snippet | null>(null);
-    const [isEditingName, setIsEditingName] = useState(false);
-    const [isEditingTags, setIsEditingTags] = useState(false);
-    const [allTags, setAllTags] = useState<string[]>([]);
-    const [viewingSnippet, setViewingSnippet] = useState<Snippet | null>(null);
-    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-    const [snippetToDelete, setSnippetToDelete] = useState<string | null>(null);
-
-    // Fetch snippets from the API
-    const fetchSnippets = async () => {
-        try {
-            setIsLoading(true);
-            const response = await fetch('/api/snippets');
-            if (!response.ok) throw new Error('Failed to fetch snippets');
-
-            const data = await response.json();
-            setSnippets(data);
-            setFilteredSnippets(data);
-            setAllTags(extractUniqueTags(data));
-            setError(null);
-        } catch (error) {
-            setError(handleSnippetError(error, 'Failed to load snippets.'));
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => { fetchSnippets(); }, []);
-    useEffect(() => { if (copied) setTimeout(() => setCopied(null), 2000); }, [copied]);
-
-    // Filter snippets when search or tag filter changes
-    useEffect(() => {
-        const filtered = snippets.filter(snippet => {
-            const matchesSearch =
-                !searchQuery ||
-                snippet.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                snippet.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                snippet.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-
-            const matchesTag = !filterTag || snippet.tags.includes(filterTag);
-
-            return matchesSearch && matchesTag;
-        });
-
-        setFilteredSnippets(filtered);
-    }, [snippets, searchQuery, filterTag]);
-
+    
+    // Fetch snippets on mount
+    useEffect(() => { 
+        fetchSnippets(); 
+    }, [fetchSnippets]);
+    
     // Tag management functions
     const addTag = () => {
         if (!currentTag.trim()) return;
@@ -121,74 +121,14 @@ export default function SnippetPage({ viewType, title = "Snippets", description 
             addTag();
         }
     };
-
-    // Snippet CRUD operations
-    const deleteSnippet = async (id: string): Promise<void> => {
-        try {
-            const response = await fetch(`/api/snippets/${id}`, { method: 'DELETE' });
-            if (!response.ok) throw new Error('Failed to delete snippet');
-            setSnippets(prev => prev.filter(s => s.id !== id));
-            toast.success("Snippet deleted successfully");
-        } catch (error) {
-            toast.error(handleSnippetError(error, "Failed to delete snippet."));
-            throw error;
-        } finally {
-            setSnippetToDelete(null);
-            setIsDeleteConfirmOpen(false);
+    
+    // Handle setting up tags when editing
+    useEffect(() => {
+        if (editingSnippet && isEditingTags) {
+            setTags([...editingSnippet.tags]);
         }
-    };
-
-    const togglePinStatus = async (id: string, isPinned: boolean): Promise<void> => {
-        try {
-            const response = await fetch(`/api/snippets/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ isPinned }),
-            });
-
-            if (!response.ok) throw new Error('Failed to update pin status');
-            const updatedSnippet = await response.json();
-            setSnippets(prev => prev.map(s => s.id === id ? updatedSnippet : s));
-            toast.success(isPinned ? "Snippet pinned" : "Snippet unpinned");
-        } catch (error) {
-            toast.error(handleSnippetError(error, "Failed to update pin status."));
-            throw error;
-        }
-    };
-
-    const updateSnippet = async (updatedSnippet: Snippet) => {
-        try {
-            const response = await fetch(`/api/snippets/${updatedSnippet.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...updatedSnippet,
-                    language: detectLanguage(updatedSnippet.content)
-                }),
-            });
-
-            if (!response.ok) throw new Error('Failed to update snippet');
-            const result = await response.json();
-            setSnippets(prev => prev.map(s => s.id === updatedSnippet.id ? result : s));
-            toast.success("Snippet updated successfully!");
-            return result;
-        } catch (error) {
-            toast.error(handleSnippetError(error, "Failed to update snippet."));
-        }
-    };
-
-    // UI interaction handlers
-    const copyToClipboard = (id: string, content: string) => {
-        navigator.clipboard.writeText(content);
-        setCopied(id);
-        toast.success("Snippet copied to clipboard!");
-    };
-
-    const toggleExpand = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setExpandedSnippet(prev => prev === id ? null : id);
-    };
-
+    }, [editingSnippet, isEditingTags]);
+    
     // Editing handlers
     const handleEditSnippet = (snippet: Snippet) => {
         setEditingSnippet({ ...snippet });
@@ -227,12 +167,7 @@ export default function SnippetPage({ viewType, title = "Snippets", description 
     };
 
     const handleTagFilter = (tag: string) => {
-        setFilterTag(prev => prev === tag ? null : tag);
-    };
-
-    const confirmDelete = (id: string) => {
-        setSnippetToDelete(id);
-        setIsDeleteConfirmOpen(true);
+        setFilterTag(tag === filterTag ? null : tag);
     };
 
     // Organized snippets data (used for carousel view)
@@ -471,9 +406,16 @@ export default function SnippetPage({ viewType, title = "Snippets", description 
         </div>
     );
 
+    // Show a loading state
+    if (isLoading && snippets.length === 0) {
+        return <SnippetPageSkeleton />;
+    }
+
     return (
         <>
-            {viewType === 'table' ? renderTableView() : renderCarouselView()}
+            <Suspense fallback={<SnippetPageSkeleton />}>
+                {viewType === 'table' ? renderTableView() : renderCarouselView()}
+            </Suspense>
 
             {/* Combined View/Edit Snippet Dialog */}
             <EditSnippetDialog
@@ -487,7 +429,7 @@ export default function SnippetPage({ viewType, title = "Snippets", description 
             />
 
             {/* Delete Confirmation Dialog */}
-            <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+            <Dialog open={isDeleteConfirmOpen} onOpenChange={cancelDelete}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>Confirm deletion</DialogTitle>
@@ -496,7 +438,7 @@ export default function SnippetPage({ viewType, title = "Snippets", description 
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>
+                        <Button variant="outline" onClick={cancelDelete}>
                             Cancel
                         </Button>
                         <Button
